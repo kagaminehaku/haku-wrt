@@ -1,0 +1,150 @@
+#=====================================================================================
+# haku-wrt: build firmware for NSY-G68-Plus only
+# Based on build-openwrt-using-imagebuilder.yml from ophub/amlogic-s9xxx-openwrt
+# Rootfs:  OpenWrt/ImmortalWrt ImageBuilder (config/imagebuilder/imagebuilder.sh)
+# Kernel:  Releases of this repository, tag kernel_stable (6.18.x.tar.gz)
+#=====================================================================================
+
+name: Build haku-wrt for NSY-G68-Plus
+
+on:
+  workflow_dispatch:
+    inputs:
+      releases_branch:
+        description: "Select the releases branch"
+        required: false
+        default: "immortalwrt:25.12.2"
+        type: choice
+        options:
+          - immortalwrt:25.12.2
+          - immortalwrt:24.10.6
+          - openwrt:25.12.5
+          - openwrt:24.10.8
+      openwrt_kernel:
+        description: "Select kernel version"
+        required: false
+        default: "6.18.y"
+        type: choice
+        options:
+          - 6.18.y
+      auto_kernel:
+        description: "Use the latest kernel uploaded to kernel_stable"
+        required: false
+        default: true
+        type: boolean
+      openwrt_ip:
+        description: "Set OpenWrt default IP address."
+        required: false
+        default: "192.168.1.1"
+
+env:
+  TZ: Etc/UTC
+  IMAGEBUILDER_SH: config/imagebuilder/imagebuilder.sh
+  OPENWRT_BOARD: nsy-g68-plus
+  KERNEL_REPO: kagaminehaku/haku-wrt
+  KERNEL_USAGE: stable
+  BUILDER_NAME: haku
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    if: ${{ github.event.repository.owner.id == github.event.sender.id }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Initialize the build environment
+        id: init
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          docker rmi -f $(docker images -q) 2>/dev/null || true
+          [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOLSDIRECTORY}"
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android 2>/dev/null
+          sudo swapoff -a
+          sudo rm -f /swapfile /mnt/swapfile
+          sudo apt-get -y update
+          sudo apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
+          sudo apt-get -y install $(curl -fsSL https://ophub.org/ubuntu2604-make-openwrt-depends)
+          sudo systemctl daemon-reload
+          sudo apt-get -y autoremove --purge
+          sudo apt-get clean
+          sudo sed -i '/NVM_DIR/d;/skel/d' /root/{.bashrc,.profile}
+          sudo rm -rf ~/{.cargo,.dotnet,.rustup}
+          sudo timedatectl set-timezone "${TZ:-Etc/UTC}"
+          sudo ntpdate ntp.ubuntu.com 0.pool.ntp.org || true
+          sudo timedatectl set-ntp true
+          date -u
+          echo "status=success" >> ${GITHUB_OUTPUT}
+
+      - name: Create virtual disk for extended storage
+        id: disk
+        run: |
+          root_avail=$(df --block-size=1G / | tail -1 | awk '{print $4}')
+          root_size=$(( root_avail - 4 ))
+          [[ "${root_size}" -gt 0 ]] || { echo "Error: Insufficient space on /: ${root_avail}G available"; exit 1; }
+
+          sudo truncate -s "${root_size}"G /root.img
+          build_dev=$(sudo losetup --find --show /root.img)
+          echo "Using /: ${root_size}G"
+
+          sudo mkfs.xfs -f -i sparse=0 -b size=4096 "${build_dev}"
+          sudo mkdir -p /builder
+          sudo mount "${build_dev}" /builder
+          sudo chown -R runner:runner /builder
+          df -Th
+          echo "status=success" >> ${GITHUB_OUTPUT}
+
+      - name: Build OpenWrt rootfs [ ${{ inputs.releases_branch }} ]
+        id: imagebuilder
+        if: ${{ steps.init.outputs.status == 'success' && !cancelled() }}
+        run: |
+          RELEASES_BRANCH="${{ inputs.releases_branch }}"
+          chmod +x ${IMAGEBUILDER_SH}
+          ${IMAGEBUILDER_SH} ${RELEASES_BRANCH}
+          # The tag prefix must match amlogic_firmware_tag in etc/config/amlogic
+          echo "build_tag=haku-wrt_g68_${RELEASES_BRANCH/:/_}_$(date +"%Y.%m.%d")" >> ${GITHUB_ENV}
+          # Let remake work on the large /builder disk
+          [[ -d "/builder/openwrt" ]] || mkdir -p /builder/openwrt
+          ln -sf /builder/openwrt ${{ github.workspace }}/openwrt
+          df -hT ${PWD}
+          echo "status=success" >> ${GITHUB_OUTPUT}
+
+      - name: Package haku-wrt for ${{ env.OPENWRT_BOARD }}
+        if: ${{ steps.imagebuilder.outputs.status == 'success' && !cancelled() }}
+        uses: ./
+        with:
+          openwrt_path: output/*rootfs.tar.gz
+          openwrt_ip: ${{ inputs.openwrt_ip }}
+          openwrt_board: ${{ env.OPENWRT_BOARD }}
+          openwrt_kernel: ${{ inputs.openwrt_kernel }}
+          auto_kernel: ${{ inputs.auto_kernel }}
+          kernel_repo: ${{ env.KERNEL_REPO }}
+          kernel_usage: ${{ env.KERNEL_USAGE }}
+          builder_name: ${{ env.BUILDER_NAME }}
+
+      - name: Upload haku-wrt to Release
+        uses: ophub/upload-to-releases@main
+        if: ${{ env.PACKAGED_STATUS == 'success' && !cancelled() }}
+        with:
+          tag: ${{ env.build_tag }}
+          artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
+          allow_updates: true
+          remove_artifacts: false
+          replaces_artifacts: true
+          make_latest: true
+          gh_token: ${{ secrets.GITHUB_TOKEN }}
+          body: |
+            ### haku-wrt for NSY-G68-Plus
+            - Rootfs: `${{ inputs.releases_branch }}`
+            - Default IP: `${{ inputs.openwrt_ip }}`
+            - Default username: `root`
+            - Default password: `password`
+            - WiFi: 2.4G `HE20`, 5G `HE80` (802.11ax), SSID `OpenWrt`, no password
+            ### Install to eMMC
+            - Login to OpenWrt → `System` → `Amlogic Service` → `Install OpenWrt`
+            ### Update
+            - `System` → `Amlogic Service` → `Online Download Update` pulls the latest release from this repository
