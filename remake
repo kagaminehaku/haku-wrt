@@ -85,7 +85,7 @@ firmware_repo="https://github.com/kagaminehaku/firmware"
 script_repo="https://github.com/kagaminehaku/luci-app-amlogic"
 
 # Set the kernel download repository
-kernel_repo="https://github.com/ophub/kernel"
+kernel_repo="https://github.com/kagaminehaku/haku-wrt"
 # Set the kernel tags (kernel_xxx) that can be overridden via the [ -u ] parameter
 default_tags="stable"
 kernel_usage=""
