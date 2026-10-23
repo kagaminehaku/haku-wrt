@@ -9,6 +9,8 @@
 # https://github.com/ophub/amlogic-s9xxx-armbian
 #
 # Description: Run on Armbian, Compile the kernel.
+# haku-wrt: also runs natively on Ubuntu arm64 (GitHub ubuntu-*-arm runners)
+#           with the system gcc and the vendored config in tools/config.
 # Copyright (C) 2021~ https://www.kernel.org
 # Copyright (C) 2021~ https://github.com/unifreq
 # Copyright (C) 2021~ https://github.com/ophub/amlogic-s9xxx-armbian
@@ -70,9 +72,9 @@ initramfs_conf="/etc/initramfs-tools/update-initramfs.conf"
 ophub_release_file="/etc/ophub-release"
 
 # Set the default for downloading kernel sources from github.com
-repo_owner="unifreq"
+repo_owner="kagaminehaku"
 repo_branch="main"
-build_kernel=("6.12.y" "6.18.y")
+build_kernel=("6.18.y")
 all_kernel=("5.10.y" "5.15.y" "6.1.y" "6.6.y" "6.12.y" "6.18.y")
 # Set whether to use the latest kernel, options: [ true / false ]
 auto_kernel="true"
@@ -80,7 +82,7 @@ auto_kernel="true"
 auto_patch="false"
 # Set custom signature for the kernel
 custom_name="-ophub"
-pkg_maintainer="ophub <noreply@ophub.org>"
+pkg_maintainer="haku-wrt <noreply@github.com>"
 # Set the kernel compile object, options: [ dtbs / all ]
 package_list="all"
 # Set the compression format, options: [ gzip / lzma / xz / zstd ]
@@ -95,21 +97,8 @@ silent_log="false"
 enable_log="false"
 output_logfile="/var/log/kernel_compile_$(date +%Y-%m-%d_%H-%M-%S).log"
 
-# Set the kernel configuration download repository, branch and path
-kernel_config_repo="https://github.com/ophub/kernel"
-kernel_config_repo_branch="main"
-kernel_config_path="kernel-config/release"
-# Set the kernel config tag directory, options: [ stable / rk3588 / rk35xx / h6 ]
-config_flavor="stable"
-config_download="false"
-
-# Compile toolchain download mirror, run on Armbian
-dev_repo="https://github.com/ophub/kernel/releases/download/toolchain"
-# Arm GNU Toolchain source: https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads
-gun_file="arm-gnu-toolchain-15.3.rel1-aarch64-aarch64-none-linux-gnu.tar.xz"
-# Set the toolchain path
-toolchain_path="/usr/local/toolchain"
-# Set the default cross-compilation toolchain: [ clang / gcc / gcc-14.2, etc. ]
+# Kernel config templates are vendored in [ tools/config/config-<VERSION.PATCHLEVEL> ]
+# Set the toolchain: [ gcc (system gcc, native aarch64) / clang ]
 toolchain_name="gcc"
 
 # CCACHE Configuration
@@ -175,8 +164,7 @@ init_var() {
             ;;
         -f | --configFlavor)
             if [[ -n "${2}" ]]; then
-                config_flavor="${2}"
-                config_download="true"
+                echo -e "${WARNING} Config flavors are not downloaded, using the vendored [ tools/config ] files."
                 shift 2
             else
                 error_msg "Invalid -f parameter [ ${2} ]!"
@@ -301,11 +289,8 @@ init_var() {
     [[ -n "${code_owner}" ]] || error_msg "The [ -r ] parameter is invalid."
     [[ -n "${code_branch}" ]] || code_branch="${repo_branch}"
 
-    # Set the gcc version code
-    [[ "${toolchain_name}" =~ ^gcc-[0-9]+.[0-9]+ ]] && {
-        gcc_version_code="${toolchain_name#*-}"
-        gun_file="arm-gnu-toolchain-${gcc_version_code}.rel1-aarch64-aarch64-none-linux-gnu.tar.xz"
-    }
+    # Only the system gcc and clang are supported
+    [[ "${toolchain_name}" =~ ^(gcc|clang)$ ]] || error_msg "Unsupported toolchain [ ${toolchain_name} ], use gcc or clang."
 
     # Set compilation parameters
     export SRC_ARCH="arm64"
@@ -349,39 +334,14 @@ toolchain_check() {
         export LD="ld.lld"
         export MFLAGS=" LLVM=1 LLVM_IAS=1 "
     else
-        # Download Arm GNU Toolchain
-        [[ -d "${toolchain_path}" ]] || mkdir -p ${toolchain_path}
-        if [[ ! -d "${toolchain_path}/${gun_file//.tar.xz/}/bin" ]]; then
-            echo -e "${INFO} Downloading the ARM GNU toolchain [ ${gun_file} ]..."
+        # Use the system gcc: the build host is aarch64, so no cross toolchain is needed
+        command -v gcc >/dev/null || error_msg "The system gcc is not installed!"
+        echo -e "${INFO} Using the system gcc: [ $(gcc --version | head -n 1) ]"
 
-            # Download the ARM GNU toolchain. If it fails, wait 1 minute and try again, try 10 times.
-            for i in {1..10}; do
-                curl -fsSL "${dev_repo}/${gun_file}" -o "${toolchain_path}/${gun_file}"
-                [[ "${?}" -eq "0" ]] && break || sleep 60
-            done
-            [[ "${?}" -eq "0" ]] || error_msg "GNU toolchain file download failed."
-
-            # Decompress the ARM GNU toolchain
-            tar -xJf ${toolchain_path}/${gun_file} -C ${toolchain_path}
-            rm -f ${toolchain_path}/${gun_file}
-
-            # List and check directory names, and change them all to lowercase
-            for dir in $(ls ${toolchain_path}); do
-                if [[ -d "${toolchain_path}/${dir}" && "${dir}" != "${dir,,}" ]]; then
-                    mv -f ${toolchain_path}/${dir} ${toolchain_path}/${dir,,}
-                fi
-            done
-            [[ -d "${toolchain_path}/${gun_file//.tar.xz/}/bin" ]] || error_msg "The gcc is not set!"
-        fi
-
-        # Add ${PATH} variable
-        path_gcc="${toolchain_path}/${gun_file//.tar.xz/}/bin:${path_os_variable}"
-        export PATH="${path_gcc}"
-
-        # Set cross compilation parameters
-        export CROSS_COMPILE="${toolchain_path}/${gun_file//.tar.xz/}/bin/aarch64-none-linux-gnu-"
-        export CC="ccache ${CROSS_COMPILE}gcc"
-        export LD="${CROSS_COMPILE}ld.bfd"
+        export PATH="${path_os_variable}"
+        export CROSS_COMPILE=""
+        export CC="ccache gcc"
+        export LD="ld.bfd"
         export MFLAGS=""
     fi
 
@@ -513,27 +473,11 @@ get_kernel_source() {
 }
 
 get_kernel_config() {
-    echo -e "${STEPS} Downloading the kernel config files..."
+    echo -e "${STEPS} Checking the kernel config files..."
 
-    # Check if the kernel config file already exists
-    if [[ -s "${config_path}/config-${kernel_verpatch}" && "${config_download}" == "false" ]]; then
-        echo -e "${INFO} The kernel config file [ config-${kernel_verpatch} ] already exists, skipping download."
-        echo -e "${INFO} Config files: \n$(ls -lh ${config_path}/ 2>/dev/null)"
-        return
-    fi
-
-    # Download the kernel config files
-    tmp_path="$(mktemp -d)"
-    for i in {1..10}; do
-        git clone --quiet --single-branch --depth=1 --branch=${kernel_config_repo_branch} ${kernel_config_repo} ${tmp_path}
-        [[ "${?}" -eq 0 ]] && break || sleep 60
-    done
-    [[ "${?}" -eq 0 ]] || error_msg "Failed to clone the [ ${kernel_config_repo} ] repository."
-
-    rm -rf ${config_path}/*
-    cp -f ${tmp_path}/${kernel_config_path}/${config_flavor}/config-* ${config_path}/
-    [[ "${?}" -eq 0 ]] || error_msg "Failed to copy the kernel config file."
-    echo -e "${INFO} Kernel config files [ ${config_flavor} ] downloaded to [ ${config_path} ]."
+    # The kernel config templates are vendored, never downloaded
+    [[ -s "${config_path}/config-${kernel_verpatch}" ]] ||
+        error_msg "Missing vendored kernel config [ ${config_path}/config-${kernel_verpatch} ]!"
     echo -e "${INFO} Config files: \n$(ls -lh ${config_path}/ 2>/dev/null)"
 }
 
