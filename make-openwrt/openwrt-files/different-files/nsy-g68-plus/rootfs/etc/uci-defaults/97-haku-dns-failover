@@ -1,0 +1,36 @@
+#!/bin/sh
+# haku-wrt: dnsmasq -> AdGuard Home forwarding is handled at runtime by
+# haku-dns-failover. Drop a persistent forward to AdGuard Home (from a manual
+# setup or restored from an older firmware), which breaks DNS whenever
+# AdGuard Home is not running.
+
+. /lib/functions.sh
+
+adguard_yaml="/etc/adguardhome/adguardhome.yaml"
+port="$(sed -n '/^dns:/,/^[a-z_]*:/s/^  port: *\([0-9][0-9]*\).*/\1/p' "$adguard_yaml" 2>/dev/null | head -n 1)"
+
+drop_adguard_server() {
+	local cfg="$1" servers server
+
+	config_get servers "$cfg" server
+	for server in $servers; do
+		case "$server" in
+		"127.0.0.1#${port:-5300}" | "127.0.0.1#5300" | "::1#${port:-5300}")
+			uci -q del_list "dhcp.$cfg.server=$server"
+			uci -q delete "dhcp.$cfg.noresolv"
+			;;
+		esac
+	done
+}
+
+config_load dhcp
+config_foreach drop_adguard_server dnsmasq
+uci commit dhcp
+
+# A restored /etc/adguardhome can carry the uid of the previous firmware
+[ -d /etc/adguardhome ] && grep -q '^adguardhome:' /etc/passwd &&
+	chown -R adguardhome:adguardhome /etc/adguardhome
+
+/etc/init.d/haku-dns-failover enable
+
+exit 0

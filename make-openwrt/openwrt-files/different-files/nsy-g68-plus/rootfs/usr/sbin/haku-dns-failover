@@ -1,0 +1,93 @@
+#!/bin/sh
+# haku-wrt: send dnsmasq queries to AdGuard Home while it is running and fall
+# back to the default OpenWrt upstreams (WAN DNS) when it is not.
+#
+# The forwarding is written only into dnsmasq's runtime conf-dir under /tmp,
+# never into /etc/config/dhcp, so a firmware update, a missing package or a
+# crashed AdGuard Home cannot leave DNS pointing at a dead port.
+#
+# Usage: haku-dns-failover          run the watch loop (started by procd)
+#        haku-dns-failover once     check and apply once
+#        haku-dns-failover clear    drop the forwarding (default DNS)
+
+ADGUARD_YAML="/etc/adguardhome/adguardhome.yaml"
+CONF_NAME="haku-adguard.conf"
+INTERVAL=15
+
+log() {
+	logger -t haku-dns-failover "$*"
+}
+
+# DNS port from the dns: section of adguardhome.yaml, empty if not configured
+adguard_port() {
+	sed -n '/^dns:/,/^[a-z_]*:/s/^  port: *\([0-9][0-9]*\).*/\1/p' "$ADGUARD_YAML" 2>/dev/null | head -n 1
+}
+
+# $1: DNS port. AdGuard Home counts as running when its process is alive and
+# something listens on that UDP port. Port 53 belongs to dnsmasq.
+adguard_alive() {
+	[ -n "$1" ] && [ "$1" != "53" ] || return 1
+	pidof AdGuardHome >/dev/null || return 1
+	netstat -lnu 2>/dev/null | awk -v p=":$1" '$4 ~ p"$" { found = 1 } END { exit !found }'
+}
+
+# $1: AdGuard Home port to forward to, empty to restore the default upstreams
+set_forward() {
+	local dir file want changed=0
+
+	for dir in /tmp/dnsmasq.*.d; do
+		[ -d "$dir" ] || continue
+		file="$dir/$CONF_NAME"
+		if [ -n "$1" ]; then
+			want="$(printf 'no-resolv\nserver=127.0.0.1#%s' "$1")"
+			[ "$(cat "$file" 2>/dev/null)" = "$want" ] && continue
+			echo "$want" >"$file"
+		else
+			[ -f "$file" ] || continue
+			rm -f "$file"
+		fi
+		changed=1
+	done
+
+	[ "$changed" = "1" ] && /etc/init.d/dnsmasq restart >/dev/null 2>&1
+	return 0
+}
+
+check_once() {
+	local port
+
+	port="$(adguard_port)"
+	if adguard_alive "$port"; then
+		set_forward "$port"
+		state="adguard:$port"
+	else
+		set_forward ""
+		state="default"
+	fi
+}
+
+case "$1" in
+once)
+	check_once
+	echo "$state"
+	exit 0
+	;;
+clear)
+	set_forward ""
+	exit 0
+	;;
+esac
+
+# Watch loop: restore the default DNS when stopped
+trap 'set_forward ""; exit 0' INT TERM
+
+last=""
+while true; do
+	check_once
+	if [ "$state" != "$last" ]; then
+		log "DNS upstream: $state"
+		last="$state"
+	fi
+	sleep "$INTERVAL" &
+	wait $!
+done
