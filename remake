@@ -30,8 +30,7 @@
 # init_var           : Initialize all variables
 # check_data         : Check the validity of the data
 # find_openwrt       : Find OpenWrt file (openwrt-armsr/*rootfs.tar.gz)
-# git_pull_dir       : Clone files from a git repository
-# download_depends   : Download the dependency files
+# check_depends      : Check the vendored dependency files
 # query_kernel       : Query the latest kernel version
 # check_kernel       : Check kernel files integrity
 # download_kernel    : Download the kernel files
@@ -74,15 +73,6 @@ board_release_file="etc/openwrt-board-release.conf"
 # Add custom OpenWrt firmware information
 op_release="etc/flippy-openwrt-release"
 ophub_release_file="etc/ophub-release"
-
-# Dependency files download repository
-depends_repo="https://github.com/kagaminehaku/amlogic-s9xxx-armbian"
-# U-BOOT files download repository
-uboot_repo="https://github.com/kagaminehaku/u-boot"
-# Firmware files download repository
-firmware_repo="https://github.com/kagaminehaku/firmware"
-# Install/Update script files download repository
-script_repo="https://github.com/kagaminehaku/luci-app-amlogic"
 
 # Set the kernel download repository
 kernel_repo="https://github.com/kagaminehaku/haku-wrt"
@@ -467,103 +457,18 @@ find_openwrt() {
     rm -rf "${temp_dir}"
 }
 
-git_pull_dir() {
+check_depends() {
     cd "${current_path}"
+    echo -e "${STEPS} Checking vendored dependency files..."
 
-    # Check git_pull_dir parameters
-    git_repo="${1}"
-    git_branch="${2}"
-    git_path="${3}"
-    [[ -n "${git_repo}" && -n "${git_branch}" && -n "${git_path}" ]] || {
-        error_msg "Incomplete git_pull_dir parameters: [ ${git_repo}, ${git_branch}, ${git_path} ]"
-    }
-
-    # Clone the repository. Retry up to 10 times with 60-second intervals on failure.
-    local clone_ok=0
-    for i in {1..10}; do
-        if git clone --quiet --single-branch --depth=1 --branch="${git_branch}" "${git_repo}" "${git_path}"; then
-            clone_ok=1
-            break
-        fi
-        sleep 60
+    # u-boot, firmware, platform files and scripts are vendored in this repository
+    for dep in "${uboot_path}/rockchip" "${firmware_path}" "${platform_files}/rockchip" "${common_files}/usr/share/amlogic"; do
+        [[ -d "${dep}" ]] || error_msg "Missing vendored dependency: [ ${dep} ]"
     done
-    [[ "${clone_ok}" -eq 1 ]] || error_msg "Failed to clone the [ ${git_repo} ] repository."
-}
 
-download_depends() {
-    cd "${current_path}"
-    echo -e "${STEPS} Downloading dependency files..."
-
-    # Download u-boot files
-    uboot_num="$(find "${uboot_path}/rockchip" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
-    if [[ -n "${uboot_num}" && "${uboot_num}" -le "5" ]]; then
-        git_tmp_path="$(mktemp -d)"
-        git_pull_dir "${uboot_repo}" main "${git_tmp_path}"
-        # Move the u-boot files to the storage directory
-        mkdir -p "${uboot_path}"
-        cp -af --no-preserve=ownership "${git_tmp_path}/u-boot/." "${uboot_path}" ||
-            error_msg "OpenWrt: u-boot download failed."
-        echo -e "${INFO} OpenWrt: u-boot download completed."
-        # Delete temporary files
-        rm -rf "${git_tmp_path}"
-    else
-        echo -e "${INFO} OpenWrt: u-boot files already exist, skipping download."
-    fi
-
-    # Download firmware files
-    firmware_num="$(find "${firmware_path}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
-    if [[ -n "${firmware_num}" && "${firmware_num}" -le "5" ]]; then
-        git_tmp_path="$(mktemp -d)"
-        git_pull_dir "${firmware_repo}" main "${git_tmp_path}"
-        # Move the firmware files to the storage directory
-        mkdir -p "${firmware_path}"
-        cp -af --no-preserve=ownership "${git_tmp_path}/firmware/." "${firmware_path}" ||
-            error_msg "OpenWrt: firmware download failed."
-        echo -e "${INFO} OpenWrt: firmware download completed."
-        # Delete temporary files
-        rm -rf "${git_tmp_path}"
-    else
-        echo -e "${INFO} OpenWrt: firmware files already exist, skipping download."
-    fi
-
-    # Download Armbian repository files
-    git_tmp_path="$(mktemp -d)"
-    git_pull_dir "${depends_repo}" main "${git_tmp_path}"
-    # Remove Armbian-specific files from the [ sbin ] directory
-    find "${git_tmp_path}" -type d -path "*/platform-files/*/rootfs/usr/sbin" -prune -exec rm -rf {} +
-    # Move the platform files to the storage directory
-    cp -af --update=none --no-preserve=ownership "${git_tmp_path}/build-armbian/armbian-files/platform-files/." "${platform_files}" ||
-        error_msg "OpenWrt: platform-files download failed."
-    echo -e "${INFO} OpenWrt: platform-files download completed."
-    # Move the different files to the storage directory
-    cp -af --update=none --no-preserve=ownership "${git_tmp_path}/build-armbian/armbian-files/different-files/." "${different_files}" ||
-        error_msg "OpenWrt: different-files download failed."
-    echo -e "${INFO} OpenWrt: different-files download completed."
-    # Move the balethirq files to the storage directory
-    cp -f --no-preserve=ownership "${git_tmp_path}/build-armbian/armbian-files/common-files/usr/sbin/balethirq.pl" "${common_files}/usr/sbin" ||
-        error_msg "OpenWrt: balethirq.pl download failed."
-    cp -f --no-preserve=ownership "${git_tmp_path}/build-armbian/armbian-files/common-files/etc/balance_irq" "${common_files}/etc" ||
-        error_msg "OpenWrt: balance_irq download failed."
-    echo -e "${INFO} OpenWrt: balethirq download completed."
-    # Delete temporary files
-    rm -rf "${git_tmp_path}"
-
-    # Download luci-app-amlogic install/update and other related files
-    git_tmp_path="$(mktemp -d)"
-    git_pull_dir "${script_repo}" main "${git_tmp_path}"
-    # Move the sbin files to the storage directory
-    cp -af --update=none --no-preserve=ownership "${git_tmp_path}/luci-app-amlogic/root/usr/sbin/." "${common_files}/usr/sbin" ||
-        error_msg "luci-app-amlogic: sbin download failed."
-    echo -e "${INFO} luci-app-amlogic: sbin download completed."
     find "${common_files}/usr/sbin/" -name "openwrt-*" -exec chmod +x {} + 2>/dev/null
-    # Move the share files to the storage directory
-    mkdir -p "${common_files}/usr/share/amlogic"
-    cp -af --update=none --no-preserve=ownership "${git_tmp_path}/luci-app-amlogic/root/usr/share/amlogic/." "${common_files}/usr/share/amlogic" ||
-        error_msg "luci-app-amlogic: share download failed."
-    echo -e "${INFO} luci-app-amlogic: share download completed."
     find "${common_files}/usr/share/amlogic/" -type f -exec chmod +x {} + 2>/dev/null
-    # Delete temporary files
-    rm -rf "${git_tmp_path}"
+    echo -e "${INFO} Vendored dependency files are present."
 }
 
 query_kernel() {
@@ -1375,8 +1280,8 @@ init_var "${@}"
 check_data
 # Find OpenWrt file
 find_openwrt
-# Download the dependency files
-download_depends
+# Check the vendored dependency files
+check_depends
 # Query the latest kernel version
 [[ "${auto_kernel}" =~ ^(true|yes)$ ]] && query_kernel
 # Download the kernel files
