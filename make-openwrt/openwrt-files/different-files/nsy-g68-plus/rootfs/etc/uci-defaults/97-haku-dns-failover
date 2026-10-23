@@ -31,6 +31,13 @@ uci commit dhcp
 [ -d /etc/adguardhome ] && grep -q '^adguardhome:' /etc/passwd &&
 	chown -R adguardhome:adguardhome /etc/adguardhome
 
+# Newer adguardhome packages only start with adguardhome.config.enabled=1.
+# A config restored from older firmware lacks the option, so AdGuard Home
+# would stay stopped although it was set up and running before the update.
+if [ -s "$adguard_yaml" ] && [ -z "$(uci -q get adguardhome.config.enabled)" ]; then
+	uci -q set adguardhome.config.enabled='1' && uci commit adguardhome
+fi
+
 /etc/init.d/haku-dns-failover enable
 
 exit 0
