@@ -182,11 +182,7 @@ if [[ "${FDTFILE}" =~ ^(rk3568-nsy-g16-plus\.dtb|rk3568-nsy-g68-plus\.dtb|rk3568
             ethtool -K eth0 tso off gso off gro off tx off rx off >/dev/null 2>&1
         fi
 
-        # Disable firewall flow offloading (OpenWrt specific)
-        uci set firewall.@defaults[0].flow_offloading='0'
-        uci set firewall.@defaults[0].flow_offloading_hw='0'
-        uci commit firewall
-        /etc/init.d/firewall restart
+        # Firewall flow offloading is left as configured (Network -> Firewall)
     ) &
     log_message "Network optimizations for ${FDTFILE} applied."
 fi
