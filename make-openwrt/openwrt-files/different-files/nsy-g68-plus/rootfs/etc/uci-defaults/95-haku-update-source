@@ -1,0 +1,17 @@
+#!/bin/sh
+# haku-wrt: a firmware update restores /etc/config/amlogic from the previous
+# system. When that came from ophub's firmware, Online Update would install
+# stock ophub images again. Point firmware and kernel updates at haku-wrt.
+
+haku_repo="https://github.com/kagaminehaku/haku-wrt"
+
+case "$(uci -q get amlogic.config.amlogic_firmware_repo)" in
+"$haku_repo") exit 0 ;;
+esac
+
+uci -q set amlogic.config.amlogic_firmware_repo="$haku_repo"
+uci -q set amlogic.config.amlogic_kernel_path="$haku_repo"
+uci -q set amlogic.config.amlogic_firmware_tag='haku-wrt_g68_'
+uci commit amlogic
+
+exit 0
