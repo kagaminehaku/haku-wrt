@@ -22,6 +22,13 @@ Kernel build (`.github/workflows/compile-haku-kernel.yml`):
 
 The compile script was changed to build with the system gcc on the arm64 runner and to use only the vendored config. Kernel sources come from [kagaminehaku/linux-6.18.y](https://github.com/kagaminehaku/linux-6.18.y), a fork of ophub/linux-6.18.y.
 
+ImageBuilder packages not in the official feeds (`config/imagebuilder/packages/`):
+
+| Files in this repo | Source | Version |
+|---|---|---|
+| `zapret-72.20260307-r1.apk`, `luci-app-zapret-72.20260307-r1.apk` (OpenWrt 25.12, apk) | [remittor/zapret-openwrt](https://github.com/remittor/zapret-openwrt) release `v72.20260307`, `zapret_v72.20260307_aarch64_generic.zip` (sha256 `db61dc1e…b48f39`) | `v72.20260307` |
+| `zapret_72.20260307-r1_aarch64_generic.ipk`, `luci-app-zapret_72.20260307-r1_all.ipk` (OpenWrt 24.10, opkg) | same archive | `v72.20260307` |
+
 Still downloaded at build time:
 
 - Kernel: Releases of this repository, tag `kernel_stable` (`6.18.x.tar.gz`), published by `compile-haku-kernel`.
