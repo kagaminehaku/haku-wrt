@@ -10,3 +10,5 @@ npm-debug.log*
 *.orig
 *~
 \#*#
+/compile-kernel/kernel
+/compile-kernel/output
