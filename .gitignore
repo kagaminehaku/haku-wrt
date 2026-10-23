@@ -1,6 +1,5 @@
 !.gitignore
 /make-openwrt/kernel
-/make-openwrt/u-boot
 /openwrt
 /openwrt-armsr
 /out
