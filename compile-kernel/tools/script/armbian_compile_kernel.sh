@@ -81,7 +81,7 @@ auto_kernel="true"
 # Set whether to apply custom kernel patches, options: [ true / false ]
 auto_patch="false"
 # Set custom signature for the kernel
-custom_name="-ophub"
+custom_name="-haku"
 pkg_maintainer="haku-wrt <noreply@github.com>"
 # Set the kernel compile object, options: [ dtbs / all ]
 package_list="all"
@@ -181,7 +181,7 @@ init_var() {
         -n | --customName)
             if [[ -n "${2}" ]]; then
                 custom_name="${2// /}"
-                [[ -n "${custom_name}" ]] || custom_name="-ophub"
+                [[ -n "${custom_name}" ]] || custom_name="-haku"
                 [[ "${custom_name:0:1}" != "-" ]] && custom_name="-${custom_name}"
                 shift 2
             else

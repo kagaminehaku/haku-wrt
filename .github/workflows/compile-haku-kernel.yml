@@ -19,7 +19,7 @@ on:
       kernel_sign:
         description: "Kernel signature (uname -r suffix)"
         required: false
-        default: "-ophub"
+        default: "-haku"
       delete_source:
         description: "Delete source after compilation"
         required: false
