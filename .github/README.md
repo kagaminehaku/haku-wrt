@@ -19,8 +19,8 @@ WiFi only works on boards where the MT7916 shows up as both `14c3:7906` and `14c
 ## How it differs from ophub
 
 - **WiFi 6 works.** ophub's packaging rewrites `iw` to a nonexistent `ipconfig` in `mac80211.sh`, which breaks HE (802.11ax) mode. haku-wrt applies that only on Amlogic, and the G68 defaults to 2.4G `HE20` / 5G `HE80`. The fix was also sent upstream in [ophub#965](https://github.com/ophub/amlogic-s9xxx-openwrt/pull/965).
-- **Pinned kernel.** Kernels come from this repository's [`kernel_stable`](https://github.com/kagaminehaku/haku-wrt/releases/tag/kernel_stable) release instead of ophub/kernel, which keeps only the latest few builds. A kernel changes only when a tested one is uploaded here.
-- **Own dependency sources.** u-boot, firmware, platform files and luci-app-amlogic scripts are fetched from forks under [kagaminehaku](https://github.com/kagaminehaku), synced on demand.
+- **Self-built kernel.** The 6.18.y kernel is compiled here from [kagaminehaku/linux-6.18.y](https://github.com/kagaminehaku/linux-6.18.y) with a vendored config and published to this repository's [`kernel_stable`](https://github.com/kagaminehaku/haku-wrt/releases/tag/kernel_stable) release. Firmware builds use only kernels from there.
+- **Vendored dependencies.** The u-boot, MT7916 firmware, platform files and luci-app-amlogic scripts the G68 needs live in this repository (see [VENDORED.md](../make-openwrt/VENDORED.md)), so builds do not download them.
 - **Own update channel.** `System → Amlogic Service → Online Download Update` downloads haku-wrt releases (tags starting with `haku-wrt_g68_`), not stock ophub images.
 
 ## Download
@@ -31,9 +31,11 @@ Default login: `192.168.1.1`, user `root`, password `password`.
 
 ## Build
 
-1. Upload a tested kernel (for example `6.18.58.tar.gz` from [ophub/kernel](https://github.com/ophub/kernel/releases/tag/kernel_stable)) to the `kernel_stable` release of this repository.
-2. Open **Actions → Build haku-wrt for NSY-G68-Plus → Run workflow**, then pick the rootfs branch.
+1. Run **Actions → Compile haku-wrt kernel**. It builds the latest 6.18.y from kagaminehaku/linux-6.18.y on an arm64 runner (about 1–2 hours) and uploads `6.18.x.tar.gz` to the `kernel_stable` release.
+2. Run **Actions → Build haku-wrt for NSY-G68-Plus**, then pick the rootfs branch.
 3. The image is published as a new `haku-wrt_g68_<branch>_<date>` release.
+
+To change the kernel (DTS, drivers, config), edit kagaminehaku/linux-6.18.y or `compile-kernel/tools/config/config-6.18` and rerun step 1.
 
 The other workflows inherited from ophub are disabled in the Actions settings.
 
