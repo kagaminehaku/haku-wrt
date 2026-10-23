@@ -127,24 +127,32 @@ jobs:
           builder_name: ${{ env.BUILDER_NAME }}
 
       - name: Upload haku-wrt to Release
-        uses: ophub/upload-to-releases@main
         if: ${{ env.PACKAGED_STATUS == 'success' && !cancelled() }}
-        with:
-          tag: ${{ env.build_tag }}
-          artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
-          allow_updates: true
-          remove_artifacts: false
-          replaces_artifacts: true
-          make_latest: true
-          gh_token: ${{ secrets.GITHUB_TOKEN }}
-          body: |
-            ### haku-wrt for NSY-G68-Plus
-            - Rootfs: `${{ inputs.releases_branch }}`
-            - Default IP: `${{ inputs.openwrt_ip }}`
-            - Default username: `root`
-            - Default password: `password`
-            - WiFi: 2.4G `HE20`, 5G `HE80` (802.11ax), SSID `OpenWrt`, no password
-            ### Install to eMMC
-            - Login to OpenWrt → `System` → `Amlogic Service` → `Install OpenWrt`
-            ### Update
-            - `System` → `Amlogic Service` → `Online Download Update` pulls the latest release from this repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASES_BRANCH: ${{ inputs.releases_branch }}
+          OPENWRT_IP: ${{ inputs.openwrt_ip }}
+        run: |
+          notes_file="$(mktemp)"
+          cat > "${notes_file}" <<EOF
+          ### haku-wrt for NSY-G68-Plus
+          - Rootfs: \`${RELEASES_BRANCH}\`
+          - Default IP: \`${OPENWRT_IP}\`
+          - Default username: \`root\`
+          - Default password: \`password\`
+          - WiFi: 2.4G \`HE20\`, 5G \`HE80\` (802.11ax), SSID \`OpenWrt\`, no password
+          ### Install to eMMC
+          - Login to OpenWrt → \`System\` → \`Amlogic Service\` → \`Install OpenWrt\`
+          ### Update
+          - \`System\` → \`Amlogic Service\` → \`Online Download Update\` pulls the latest release from this repository
+          EOF
+
+          # Same tag built again on the same day: replace assets and notes
+          if gh release view "${build_tag}" >/dev/null 2>&1; then
+              gh release upload "${build_tag}" "${PACKAGED_OUTPUTPATH}"/* --clobber
+              gh release edit "${build_tag}" --notes-file "${notes_file}" --latest
+          else
+              gh release create "${build_tag}" "${PACKAGED_OUTPUTPATH}"/* \
+                  --title "${build_tag}" --notes-file "${notes_file}" --latest
+          fi
