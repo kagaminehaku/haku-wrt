@@ -19,6 +19,10 @@ if [[ -s "${backup_list_conf}" ]]; then
     done <"${backup_list_conf}"
 else
     BACKUP_LIST='./etc/AdGuardHome.yaml \
+./etc/adguardhome/ \
+./opt/zapret/config \
+./opt/zapret/ipset/ \
+./opt/zapret/init.d/openwrt/custom.d/ \
 ./etc/amlogic_backup_list.conf \
 ./etc/adblocklist/ \
 ./etc/amule/ \
