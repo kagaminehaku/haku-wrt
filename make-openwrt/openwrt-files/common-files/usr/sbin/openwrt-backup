@@ -20,6 +20,7 @@ if [[ -s "${backup_list_conf}" ]]; then
 else
     BACKUP_LIST='./etc/AdGuardHome.yaml \
 ./etc/adguardhome/ \
+./etc/haku/ \
 ./opt/zapret/config \
 ./opt/zapret/ipset/ \
 ./opt/zapret/init.d/openwrt/custom.d/ \

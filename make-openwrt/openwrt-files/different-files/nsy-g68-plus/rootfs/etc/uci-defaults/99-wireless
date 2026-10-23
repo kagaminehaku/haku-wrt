@@ -2,11 +2,35 @@
 
 . /lib/functions.sh
 
+# haku-wrt: only set these defaults on a fresh install. A firmware update
+# restores /etc/config/wireless (and this marker) and must not overwrite them.
+marker="/etc/haku/wireless-defaults"
+[ -f "${marker}" ] && exit 0
+
+customized="0"
+check_iface() {
+    local ssid encryption
+    config_get ssid "${1}" ssid
+    config_get encryption "${1}" encryption "none"
+    case "${ssid}" in
+    OpenWrt | ImmortalWrt | "") ;;
+    *) customized="1" ;;
+    esac
+    [ "${encryption}" = "none" ] || customized="1"
+}
+
 # =======================================================
 # 1. Configure wireless settings
 # =======================================================
 if [ ! -f /etc/config/wireless ]; then
     wifi config
+fi
+
+config_load wireless
+config_foreach check_iface wifi-iface
+if [ "${customized}" = "1" ]; then
+    mkdir -p "${marker%/*}" && touch "${marker}"
+    exit 0
 fi
 
 # -----------------------------------------------------------
@@ -56,5 +80,7 @@ fi
 # -----------------------------------------------------------
 uci commit wireless
 wifi reload
+
+mkdir -p "${marker%/*}" && touch "${marker}"
 
 exit 0
