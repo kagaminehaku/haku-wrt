@@ -21,6 +21,7 @@ WiFi only works on boards where the MT7916 shows up as both `14c3:7906` and `14c
 - **WiFi 6 works.** ophub's packaging rewrites `iw` to a nonexistent `ipconfig` in `mac80211.sh`, which breaks HE (802.11ax) mode. haku-wrt applies that only on Amlogic, and the G68 defaults to 2.4G `HE20` / 5G `HE80`. The fix was also sent upstream in [ophub#965](https://github.com/ophub/amlogic-s9xxx-openwrt/pull/965).
 - **Self-built kernel.** The 6.18.y kernel is compiled here from [kagaminehaku/linux-6.18.y](https://github.com/kagaminehaku/linux-6.18.y) with a vendored config and published to this repository's [`kernel_stable`](https://github.com/kagaminehaku/haku-wrt/releases/tag/kernel_stable) release. Firmware builds use only kernels from there.
 - **Vendored dependencies.** The u-boot, MT7916 firmware, platform files and luci-app-amlogic scripts the G68 needs live in this repository (see [VENDORED.md](../make-openwrt/VENDORED.md)), so builds do not download them.
+- **zapret and AdGuard Home included.** Both are under `Services` in LuCI. zapret (DPI bypass, from [remittor/zapret-openwrt](https://github.com/remittor/zapret-openwrt)) needs a strategy that suits your ISP. AdGuard Home starts with its setup wizard on port 3000.
 - **Own update channel.** `System → Amlogic Service → Online Download Update` downloads haku-wrt releases (tags starting with `haku-wrt_g68_`), not stock ophub images.
 
 ## Download

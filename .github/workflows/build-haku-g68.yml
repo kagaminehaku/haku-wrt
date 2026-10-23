@@ -142,6 +142,7 @@ jobs:
           - Default username: \`root\`
           - Default password: \`password\`
           - WiFi: 2.4G \`HE20\`, 5G \`HE80\` (802.11ax), SSID \`OpenWrt\`, no password
+          - Services: zapret, AdGuard Home (setup wizard on port \`3000\`)
           ### Install to eMMC
           - Login to OpenWrt → \`System\` → \`Amlogic Service\` → \`Install OpenWrt\`
           ### Update
