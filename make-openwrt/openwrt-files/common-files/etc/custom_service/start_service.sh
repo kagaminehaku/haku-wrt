@@ -177,9 +177,10 @@ if [[ "${FDTFILE}" =~ ^(rk3568-nsy-g16-plus\.dtb|rk3568-nsy-g68-plus\.dtb|rk3568
         set_mtu eth0
         set_mtu br-lan
 
-        # Disable offloading features to improve network stability
+        # Disable the checksum and TSO offloads of eth0 (DSA-tagged frames) to improve network
+        # stability; GRO/GSO are done in software and stay enabled
         if [[ -d "/sys/class/net/eth0" ]] && command -v ethtool >/dev/null 2>&1; then
-            ethtool -K eth0 tso off gso off gro off tx off rx off >/dev/null 2>&1
+            ethtool -K eth0 tso off tx off rx off >/dev/null 2>&1
         fi
 
         # Firewall flow offloading is left as configured (Network -> Firewall)
