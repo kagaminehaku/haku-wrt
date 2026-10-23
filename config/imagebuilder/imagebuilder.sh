@@ -42,6 +42,7 @@ make_path="${PWD}"
 openwrt_dir="imagebuilder"
 imagebuilder_path="${make_path}/${openwrt_dir}"
 custom_files_path="${make_path}/config/imagebuilder/files"
+custom_packages_path="${make_path}/config/imagebuilder/packages"
 custom_config_file="${make_path}/config/imagebuilder/config"
 output_path="${make_path}/output"
 tmp_path="${imagebuilder_path}/tmp"
@@ -136,6 +137,12 @@ custom_packages() {
 
     # Download other luci-app-xxx
     # ......
+
+    # Add vendored packages that are not in the official feeds (e.g. zapret)
+    if [[ -d "${custom_packages_path}" ]]; then
+        cp -f "${custom_packages_path}"/*.{apk,ipk} . 2>/dev/null || true
+        echo -e "${INFO} Vendored packages added from [ ${custom_packages_path} ]."
+    fi
 
     # Remove the packages that are not needed based on the Image Builder type (APK or OPKG)
     if grep -q "CONFIG_USE_APK=y" ../.config; then
