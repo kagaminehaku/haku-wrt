@@ -1,0 +1,214 @@
+#!/bin/sh
+# haku-wrt: spread the switch ports over the two links between the RTL8367S
+# and the SoC. Ports that carry WAN traffic use gmac1 (SGMII to switch port 6),
+# all other ports use gmac0 (RGMII to port 7), so WAN and LAN traffic each get
+# their own 1 Gbit/s link.
+#
+# WAN ports follow the config: the interfaces in the firewall "wan" zone are
+# traced down to switch ports through VLANs, bridges and bridge VLANs. Set
+# network.globals.haku_gmac1_ports to a list of ports to pick them by hand, or
+# to "none" to keep every port on gmac0. DRY_RUN=1 only prints the plan.
+
+. /lib/functions.sh
+
+GMAC0_DEVICE="fe2a0000.ethernet"
+GMAC1_DEVICE="fe010000.ethernet"
+
+log() {
+	if [ -n "$DRY_RUN" ]; then
+		echo "$*"
+	else
+		logger -t haku-conduit "$*"
+	fi
+}
+
+netdev_by_device() {
+	local dev
+
+	for dev in /sys/class/net/*; do
+		[ "$(basename "$(readlink -f "$dev/device")")" = "$1" ] || continue
+		basename "$dev"
+		return
+	done
+}
+
+# Prints "port conduit" for every DSA user port: its iflink points to a
+# conduit, which is the netdev that has a DSA tagging protocol.
+user_ports() {
+	local dev conduits="" iflink c
+
+	for dev in /sys/class/net/*; do
+		[ -e "$dev/dsa/tagging" ] &&
+			conduits="$conduits $(cat "$dev/ifindex"):$(basename "$dev")"
+	done
+
+	for dev in /sys/class/net/*; do
+		iflink="$(cat "$dev/iflink")"
+		[ "$iflink" = "$(cat "$dev/ifindex")" ] && continue
+		for c in $conduits; do
+			[ "${c%%:*}" = "$iflink" ] && echo "$(basename "$dev") ${c#*:}"
+		done
+	done
+}
+
+is_user_port() {
+	case " $USER_PORTS " in
+	*" $1 "*) return 0 ;;
+	esac
+	return 1
+}
+
+add_wan_port() {
+	case " $WAN_PORTS " in
+	*" $1 "*) ;;
+	*) WAN_PORTS="$WAN_PORTS $1" ;;
+	esac
+}
+
+find_device_cb() {
+	local name
+
+	config_get name "$1" name
+	[ "$name" = "$2" ] || return
+	config_get D_TYPE "$1" type
+	config_get D_PORTS "$1" ports
+	config_get D_IFNAME "$1" ifname
+}
+
+find_bridge_vlan_cb() {
+	local device vlan
+
+	config_get device "$1" device
+	config_get vlan "$1" vlan
+	[ "$device" = "$2" ] && [ "$vlan" = "$3" ] || return
+	BV_FOUND=1
+	config_get BV_PORTS "$1" ports
+}
+
+# Adds the switch ports below network device $1 to WAN_PORTS
+resolve() {
+	local name="${1%%:*}" depth="${2:-0}" ports ifname p
+
+	name="${name%\*}"
+	[ "$depth" -gt 5 ] && return
+
+	if is_user_port "$name"; then
+		add_wan_port "$name"
+		return
+	fi
+
+	D_TYPE="" D_PORTS="" D_IFNAME=""
+	config_foreach find_device_cb device "$name"
+	ports="$D_PORTS"
+	ifname="$D_IFNAME"
+	case "$D_TYPE" in
+	bridge)
+		for p in $ports; do
+			resolve "$p" $((depth + 1))
+		done
+		return
+		;;
+	8021q | 8021ad)
+		resolve "$ifname" $((depth + 1))
+		return
+		;;
+	esac
+
+	# Dotted VLAN names: a bridge VLAN (br-lan.10) or a port VLAN (lan4.35)
+	case "$name" in
+	*.*)
+		BV_FOUND="" BV_PORTS=""
+		config_foreach find_bridge_vlan_cb bridge-vlan "${name%.*}" "${name##*.}"
+		if [ -n "$BV_FOUND" ]; then
+			ports="$BV_PORTS"
+			for p in $ports; do
+				resolve "$p" $((depth + 1))
+			done
+		else
+			resolve "${name%.*}" $((depth + 1))
+		fi
+		;;
+	esac
+}
+
+# Adds the switch ports of network interface $1
+resolve_interface() {
+	local devices d depth="${2:-0}"
+
+	[ "$depth" -gt 3 ] && return
+	config_get devices "$1" device
+	[ -n "$devices" ] || config_get devices "$1" ifname
+	for d in $devices; do
+		case "$d" in
+		@*) resolve_interface "${d#@}" $((depth + 1)) ;;
+		*) resolve "$d" ;;
+		esac
+	done
+}
+
+wan_zone_cb() {
+	local name network
+
+	config_get name "$1" name
+	[ "$name" = "wan" ] || return
+	config_get network "$1" network
+	WAN_IFACES="$WAN_IFACES $network"
+}
+
+# The switch driver is a module, give it a moment to create its ports at boot
+for i in 1 2 3 4 5 6 7 8 9 10; do
+	[ -n "$(user_ports)" ] && break
+	sleep 1
+done
+
+gmac0="$(netdev_by_device "$GMAC0_DEVICE")"
+gmac1="$(netdev_by_device "$GMAC1_DEVICE")"
+if [ -z "$gmac0" ] || [ -z "$gmac1" ]; then
+	log "gmac0 or gmac1 not found, leaving the switch ports alone"
+	exit 0
+fi
+
+PORT_MAP="$(user_ports)"
+USER_PORTS="$(echo "$PORT_MAP" | cut -d' ' -f1 | tr '\n' ' ')"
+
+WAN_PORTS=""
+manual="$(uci ${UCI_CONFIG_DIR:+-c "$UCI_CONFIG_DIR"} -q get network.globals.haku_gmac1_ports)"
+case "$manual" in
+"" | auto)
+	WAN_IFACES=""
+	config_load firewall
+	config_foreach wan_zone_cb zone
+	[ -n "$WAN_IFACES" ] || WAN_IFACES="wan wan6"
+
+	config_load network
+	for iface in $WAN_IFACES; do
+		resolve_interface "$iface"
+	done
+	;;
+none)
+	;;
+*)
+	for p in $manual; do
+		is_user_port "$p" && add_wan_port "$p"
+	done
+	;;
+esac
+
+log "gmac1 ($gmac1) ports:${WAN_PORTS:- none}"
+
+echo "$PORT_MAP" | while read -r port current; do
+	[ -n "$port" ] || continue
+	want="$gmac0"
+	case " $WAN_PORTS " in
+	*" $port "*) want="$gmac1" ;;
+	esac
+	[ "$current" = "$want" ] && continue
+
+	if [ -n "$DRY_RUN" ]; then
+		log "would move $port from $current to $want"
+	elif ip link set dev "$port" type dsa conduit "$want"; then
+		log "$port now uses $want"
+	else
+		log "failed to move $port to $want, it stays on $current"
+	fi
+done

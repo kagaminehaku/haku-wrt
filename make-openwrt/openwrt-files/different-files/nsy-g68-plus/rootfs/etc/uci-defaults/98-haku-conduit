@@ -1,0 +1,7 @@
+#!/bin/sh
+# haku-wrt: spread the switch ports over gmac0 and gmac1 at boot and on network
+# changes (see /usr/sbin/haku-conduit)
+
+/etc/init.d/haku-conduit enable
+
+exit 0
