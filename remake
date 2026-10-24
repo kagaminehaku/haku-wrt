@@ -1070,6 +1070,15 @@ refactor_rootfs() {
     # For rk3328
     echo -e "snd_soc_simple_card_utils\nsnd_soc_simple_card\nsnd_soc_rockchip_i2s" >etc/modules.d/snd-rk3328
 
+    # The NSY-G68-Plus has none of the hardware most of the drivers above are
+    # for; keep only the USB NIC, MT7916 (mt7915e), crypto and USB modem ones
+    [[ "${board}" == "nsy-g68-plus" ]] && {
+        rm -f etc/modules.d/{brcmfmac,brcmutil,bcmdhd,rtl8188eu,8189fs,rtl8188fu,rtw88_8822bs,rtw88_8822cs}
+        rm -f etc/modules.d/{rt2500-usb,rt2800-usb,rt2x00-usb,mt7601u,mt7663u,mt76x0u,mt76x2u,mt76x2e,mt7921e,ssv6051}
+        rm -f etc/modules.d/{panfrost,pwm_meson,ath10k_core,ath10k_sdio,ath10k_usb,ath10k-pci,ath10k,watchdog}
+        rm -f etc/modules.d/{rk_gpu,rk_npu,drm-rockchip,snd-rk3568,snd-rk3328,pwm-fan}
+    }
+
     # Add blacklist
     mkdir -p etc/modprobe.d
     cat >etc/modprobe.d/99-local.conf <<EOF
