@@ -1,0 +1,83 @@
+#==========================================================================
+# haku-wrt: build mainline U-Boot for NSY-G68-Plus
+# Source:  u-boot/u-boot + compile-uboot/nsy-g68-plus (device tree, defconfig)
+# Blobs:   rockchip-linux/rkbin DDR init (TPL) and BL31, pinned by commit
+#
+# Publishes u-boot-rockchip-spi.bin (for the SPI flash) and
+# u-boot-rockchip.bin (for eMMC at sector 64) to the uboot_g68 release.
+#==========================================================================
+
+name: Compile haku-wrt U-Boot
+
+on:
+  workflow_dispatch:
+    inputs:
+      uboot_ref:
+        description: "U-Boot tag or branch"
+        required: false
+        default: "v2026.10"
+
+env:
+  TZ: Etc/UTC
+  BOARD_DIR: compile-uboot/nsy-g68-plus
+  DEFCONFIG: nsy-g68-plus-rk3568_defconfig
+  # Same DDR init version as the vendor bootloader on the board (V1.15)
+  RKBIN_DDR: https://raw.githubusercontent.com/rockchip-linux/rkbin/44de354d935396b17860b516487f914df1c94fbd/bin/rk35/rk3568_ddr_1560MHz_v1.15.bin
+  RKBIN_BL31: https://raw.githubusercontent.com/rockchip-linux/rkbin/0fbbfa3a3dabd37c8d1524b330a3d3ab8b641694/bin/rk35/rk3568_bl31_v1.46.elf
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04-arm
+    if: ${{ github.event.repository.owner.id == github.event.sender.id }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get -y update
+          sudo apt-get -y install bc bison build-essential device-tree-compiler flex \
+              libgnutls28-dev libssl-dev python3-dev python3-pyelftools python3-setuptools \
+              swig uuid-dev
+
+      - name: Fetch U-Boot and Rockchip blobs
+        run: |
+          git clone --depth 1 -b "${{ inputs.uboot_ref }}" https://github.com/u-boot/u-boot.git u-boot
+          mkdir -p rkbin
+          curl -fsSL -o rkbin/ddr.bin "${RKBIN_DDR}"
+          curl -fsSL -o rkbin/bl31.elf "${RKBIN_BL31}"
+          sha256sum rkbin/*
+
+      - name: Compile U-Boot [ ${{ inputs.uboot_ref }} ]
+        run: |
+          cp "${BOARD_DIR}/rk3568-nsy-g68-plus.dts" u-boot/dts/upstream/src/arm64/rockchip/
+          cp "${BOARD_DIR}/rk3568-nsy-g68-plus-u-boot.dtsi" u-boot/arch/arm/dts/
+          cp "${BOARD_DIR}/${DEFCONFIG}" u-boot/configs/
+          cd u-boot
+          make "${DEFCONFIG}"
+          make -j"$(nproc)" BL31=../rkbin/bl31.elf ROCKCHIP_TPL=../rkbin/ddr.bin
+          mkdir -p ../output
+          cp u-boot-rockchip-spi.bin u-boot-rockchip.bin idbloader.img u-boot.itb ../output/
+          cp .config ../output/uboot-nsy-g68-plus.config
+          cd ../output
+          sha256sum * > sha256sums.txt
+          ls -l
+
+      - name: Upload U-Boot to the uboot_g68 release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          files=(output/*)
+          if gh release view uboot_g68 >/dev/null 2>&1; then
+              gh release upload uboot_g68 "${files[@]}" --clobber
+          else
+              gh release create uboot_g68 "${files[@]}" \
+                  --title "uboot_g68" --latest=false \
+                  --notes "Mainline U-Boot (${{ inputs.uboot_ref }}) for NSY-G68-Plus, built from compile-uboot/nsy-g68-plus with rkbin DDR v1.15 and BL31 v1.46. u-boot-rockchip-spi.bin goes to the SPI flash (offset 0)."
+          fi

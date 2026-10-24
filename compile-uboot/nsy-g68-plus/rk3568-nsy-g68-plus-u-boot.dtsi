@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0+
+
+#include "rk356x-u-boot.dtsi"
+
+&sdhci {
+	cap-mmc-highspeed;
+};
+
+/* Lets SPL, started from SPI by the boot ROM, load U-Boot from SPI too */
+&sfc {
+	flash@0 {
+		bootph-pre-ram;
+		bootph-some-ram;
+	};
+};
