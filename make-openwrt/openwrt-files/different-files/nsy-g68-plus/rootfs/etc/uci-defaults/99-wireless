@@ -33,12 +33,17 @@ if [ "${customized}" = "1" ]; then
     exit 0
 fi
 
+# The radios start disabled with a random WPA2/WPA3 key, so a fresh install
+# never broadcasts an open network; enable them in LuCI, where the key can be
+# read or changed.
+key="$(hexdump -n 6 -e '6/1 "%02x"' /dev/urandom)"
+
 # -----------------------------------------------------------
 # 2. Configure 2G (radio0) - HE20 (AX mode)
 # -----------------------------------------------------------
 # Check if radio0 exists to avoid errors
 if uci get wireless.radio0 >/dev/null 2>&1; then
-    uci set wireless.radio0.disabled='0'
+    uci set wireless.radio0.disabled='1'
     uci set wireless.radio0.country='VN'
     uci set wireless.radio0.band='2g'
     uci set wireless.radio0.channel='6'
@@ -51,7 +56,8 @@ if uci get wireless.radio0 >/dev/null 2>&1; then
     uci set wireless.default_radio0.network='lan'
     uci set wireless.default_radio0.mode='ap'
     uci set wireless.default_radio0.ssid='OpenWrt'
-    uci set wireless.default_radio0.encryption='none'
+    uci set wireless.default_radio0.encryption='sae-mixed'
+    uci set wireless.default_radio0.key="${key}"
 fi
 
 # -----------------------------------------------------------
@@ -59,7 +65,7 @@ fi
 # -----------------------------------------------------------
 # Check if radio1 exists to avoid errors
 if uci get wireless.radio1 >/dev/null 2>&1; then
-    uci set wireless.radio1.disabled='0'
+    uci set wireless.radio1.disabled='1'
     uci set wireless.radio1.country='VN'
     uci set wireless.radio1.band='5g'
     uci set wireless.radio1.channel='149'
@@ -72,7 +78,8 @@ if uci get wireless.radio1 >/dev/null 2>&1; then
     uci set wireless.default_radio1.network='lan'
     uci set wireless.default_radio1.mode='ap'
     uci set wireless.default_radio1.ssid='OpenWrt'
-    uci set wireless.default_radio1.encryption='none'
+    uci set wireless.default_radio1.encryption='sae-mixed'
+    uci set wireless.default_radio1.key="${key}"
 fi
 
 # -----------------------------------------------------------
