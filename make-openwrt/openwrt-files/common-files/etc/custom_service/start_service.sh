@@ -170,17 +170,20 @@ if [[ "${FDTFILE}" =~ ^(rk3568-nsy-g16-plus\.dtb|rk3568-nsy-g68-plus\.dtb|rk3568
         # Wait for network to be up
         sleep 10
 
-        # Set MTU to 1500 for eth0 and br-lan
-        set_mtu() {
-            [[ -d "/sys/class/net/${1}" ]] && ip link set "${1}" mtu 1500 >/dev/null 2>&1
-        }
-        set_mtu eth0
-        set_mtu br-lan
+        # The switch conduit is gmac0 (fe2a0000), which is eth0 or eth1 depending on whether
+        # gmac1 probes first, so look it up by device rather than by name
+        conduit=""
+        for dev in /sys/class/net/*; do
+            [[ "$(basename "$(readlink -f "${dev}/device")")" == "fe2a0000.ethernet" ]] && conduit="$(basename "${dev}")"
+        done
 
-        # Disable the checksum and TSO offloads of eth0 (DSA-tagged frames) to improve network
-        # stability; GRO/GSO are done in software and stay enabled
-        if [[ -d "/sys/class/net/eth0" ]] && command -v ethtool >/dev/null 2>&1; then
-            ethtool -K eth0 tso off tx off rx off >/dev/null 2>&1
+        # Set MTU to 1500 for br-lan; DSA sizes the conduit MTU for the CPU tag itself
+        [[ -d "/sys/class/net/br-lan" ]] && ip link set br-lan mtu 1500 >/dev/null 2>&1
+
+        # Disable the checksum and TSO offloads of the conduit (DSA-tagged frames) to improve
+        # network stability; GRO/GSO are done in software and stay enabled
+        if [[ -n "${conduit}" ]] && command -v ethtool >/dev/null 2>&1; then
+            ethtool -K "${conduit}" tso off tx off rx off >/dev/null 2>&1
         fi
 
         # Firewall flow offloading is left as configured (Network -> Firewall)
