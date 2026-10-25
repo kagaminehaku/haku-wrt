@@ -1,15 +1,17 @@
 diff --git a/drivers/pci/pcie_dw_rockchip.c b/drivers/pci/pcie_dw_rockchip.c
-index 61117fa..d654279 100644
+index 61117fa..3491d77 100644
 --- a/drivers/pci/pcie_dw_rockchip.c
 +++ b/drivers/pci/pcie_dw_rockchip.c
-@@ -483,6 +483,23 @@ rockchip_pcie_probe_err_init_port:
+@@ -483,6 +483,29 @@ rockchip_pcie_probe_err_init_port:
  	return ret;
  }
  
 +/*
-+ * Hand the link back untrained: assert #PERST, stop the LTSSM and hold the
-+ * controller in reset, so the OS driver starts from the same state as after
-+ * a cold boot instead of finding a link it did not bring up.
++ * Hand the link back untrained: assert #PERST, stop the LTSSM, hold the
++ * controller in reset and put the PHY back in reset, so the OS driver starts
++ * from the same state as after a cold boot. A PHY left running is shared on
++ * RK3568 when the PCIe 3.0 lanes are bifurcated: the second controller to
++ * probe in the OS reinitialises it under the first one's trained link.
 + */
 +static int rockchip_pcie_remove(struct udevice *dev)
 +{
@@ -19,14 +21,18 @@ index 61117fa..d654279 100644
 +		dm_gpio_set_value(&priv->rst_gpio, 0);
 +
 +	rk_pcie_disable_ltssm(priv);
++	reset_assert_bulk(&priv->rsts);
 +
-+	return reset_assert_bulk(&priv->rsts);
++	generic_phy_power_off(&priv->phy);
++	generic_phy_exit(&priv->phy);
++
++	return 0;
 +}
 +
  static const struct dm_pci_ops rockchip_pcie_ops = {
  	.read_config	= pcie_dw_read_config,
  	.write_config	= pcie_dw_write_config,
-@@ -500,5 +517,7 @@ U_BOOT_DRIVER(rockchip_dw_pcie) = {
+@@ -500,5 +523,7 @@ U_BOOT_DRIVER(rockchip_dw_pcie) = {
  	.of_match		= rockchip_pcie_ids,
  	.ops			= &rockchip_pcie_ops,
  	.probe			= rockchip_pcie_probe,
