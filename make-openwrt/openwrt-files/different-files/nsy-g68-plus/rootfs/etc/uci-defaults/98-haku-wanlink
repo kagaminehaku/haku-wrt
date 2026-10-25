@@ -1,0 +1,42 @@
+#!/bin/sh
+# haku-wrt: give WAN its own 1G link to the SoC. Switch port 6 ("sgmii") is
+# wired to gmac1 (eth0). Bridging it with the WAN port in br-wanlink makes the
+# switch forward that port to eth0 in hardware, and the wan interfaces run on
+# eth0, while LAN stays on gmac0. To use another port as WAN, move it from
+# br-lan to br-wanlink. For a second WAN, turn on VLAN filtering in
+# br-wanlink, give each WAN port its own untagged VLAN, tag them all on sgmii
+# and run the wan interfaces on eth0.<vid>.
+#
+# Only a config whose wan runs on the plain "wan" port is converted; anything
+# else (a VLAN on it, another port, an earlier conversion) is left alone.
+
+# Leftovers of the multi-conduit attempt, which the switch cannot do
+rm -f /etc/rc.d/S19haku-conduit /etc/rc.d/K*haku-conduit
+uci -q delete network.globals.haku_gmac1_ports
+
+uci -q get network.wanlink >/dev/null && { uci commit network; exit 0; }
+[ "$(uci -q get network.wan.device)" = "wan" ] || { uci commit network; exit 0; }
+uci -q show network | grep -q "\.ports=.*'wan'" && { uci commit network; exit 0; }
+
+# The board MAC of wan belongs on the interface that now carries the traffic
+for sec in $(uci -q show network | sed -n "s/^network\.\([^.]*\)\.name='wan'$/\1/p"); do
+	[ "$(uci -q get network.$sec)" = "device" ] && uci set network.$sec.name='eth0'
+done
+
+sec="$(uci add network device)"
+uci set network.$sec.name='br-wanlink'
+uci set network.$sec.type='bridge'
+uci add_list network.$sec.ports='wan'
+uci add_list network.$sec.ports='sgmii'
+uci set network.$sec.ipv6='0'
+
+uci set network.wanlink=interface
+uci set network.wanlink.device='br-wanlink'
+uci set network.wanlink.proto='none'
+
+uci set network.wan.device='eth0'
+[ "$(uci -q get network.wan6.device)" = "wan" ] && uci set network.wan6.device='eth0'
+
+uci commit network
+
+exit 0
