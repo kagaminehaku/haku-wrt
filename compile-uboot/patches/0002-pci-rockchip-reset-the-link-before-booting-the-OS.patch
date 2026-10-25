@@ -1,0 +1,36 @@
+diff --git a/drivers/pci/pcie_dw_rockchip.c b/drivers/pci/pcie_dw_rockchip.c
+index 61117fa..d654279 100644
+--- a/drivers/pci/pcie_dw_rockchip.c
++++ b/drivers/pci/pcie_dw_rockchip.c
+@@ -483,6 +483,23 @@ rockchip_pcie_probe_err_init_port:
+ 	return ret;
+ }
+ 
++/*
++ * Hand the link back untrained: assert #PERST, stop the LTSSM and hold the
++ * controller in reset, so the OS driver starts from the same state as after
++ * a cold boot instead of finding a link it did not bring up.
++ */
++static int rockchip_pcie_remove(struct udevice *dev)
++{
++	struct rk_pcie *priv = dev_get_priv(dev);
++
++	if (dm_gpio_is_valid(&priv->rst_gpio))
++		dm_gpio_set_value(&priv->rst_gpio, 0);
++
++	rk_pcie_disable_ltssm(priv);
++
++	return reset_assert_bulk(&priv->rsts);
++}
++
+ static const struct dm_pci_ops rockchip_pcie_ops = {
+ 	.read_config	= pcie_dw_read_config,
+ 	.write_config	= pcie_dw_write_config,
+@@ -500,5 +517,7 @@ U_BOOT_DRIVER(rockchip_dw_pcie) = {
+ 	.of_match		= rockchip_pcie_ids,
+ 	.ops			= &rockchip_pcie_ops,
+ 	.probe			= rockchip_pcie_probe,
++	.remove			= rockchip_pcie_remove,
+ 	.priv_auto		= sizeof(struct rk_pcie),
++	.flags			= DM_FLAG_OS_PREPARE,
+ };

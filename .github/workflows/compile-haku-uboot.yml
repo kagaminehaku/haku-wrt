@@ -55,6 +55,10 @@ jobs:
 
       - name: Compile U-Boot [ ${{ inputs.uboot_ref }} ]
         run: |
+          for p in compile-uboot/patches/*.patch; do
+              echo "Applying ${p##*/}"
+              git -C u-boot apply "${PWD}/${p}"
+          done
           cp "${BOARD_DIR}/rk3568-nsy-g68-plus.dts" u-boot/dts/upstream/src/arm64/rockchip/
           cp "${BOARD_DIR}/rk3568-nsy-g68-plus-u-boot.dtsi" u-boot/arch/arm/dts/
           cp "${BOARD_DIR}/${DEFCONFIG}" u-boot/configs/

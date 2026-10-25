@@ -1,0 +1,28 @@
+diff --git a/drivers/nvme/nvme_pci.c b/drivers/nvme/nvme_pci.c
+index c24f8cf..f750813 100644
+--- a/drivers/nvme/nvme_pci.c
++++ b/drivers/nvme/nvme_pci.c
+@@ -37,12 +37,23 @@ static int nvme_probe(struct udevice *udev)
+ 	return nvme_init(udev);
+ }
+ 
++/*
++ * Shut the controller down before the OS starts: left enabled, it keeps its
++ * queues in memory the OS reuses and confuses the OS driver taking over.
++ */
++static int nvme_pci_remove(struct udevice *udev)
++{
++	return nvme_shutdown(udev);
++}
++
+ U_BOOT_DRIVER(nvme) = {
+ 	.name	= "nvme",
+ 	.id	= UCLASS_NVME,
+ 	.bind	= nvme_bind,
+ 	.probe	= nvme_probe,
++	.remove	= nvme_pci_remove,
+ 	.priv_auto	= sizeof(struct nvme_dev),
++	.flags	= DM_FLAG_OS_PREPARE,
+ };
+ 
+ struct pci_device_id nvme_supported[] = {
