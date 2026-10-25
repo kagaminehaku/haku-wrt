@@ -22,7 +22,7 @@ CONFIG_SPL_LOAD_FIT=y
 # CONFIG_BOOTMETH_VBE is not set
 CONFIG_LEGACY_IMAGE_FORMAT=y
 CONFIG_USE_PREBOOT=y
-CONFIG_PREBOOT="if button recovery; then setenv boot_targets usb mmc0; else setenv boot_targets mmc0 usb; fi"
+CONFIG_PREBOOT="if button recovery; then setenv boot_targets usb nvme mmc0; else setenv boot_targets nvme mmc0 usb; fi"
 CONFIG_DEFAULT_FDT_FILE="rockchip/rk3568-nsy-g68-plus.dtb"
 # CONFIG_DISPLAY_CPUINFO is not set
 CONFIG_DISPLAY_BOARDINFO_LATE=y
