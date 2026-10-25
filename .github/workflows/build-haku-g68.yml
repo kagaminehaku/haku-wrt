@@ -18,6 +18,7 @@ on:
         options:
           - immortalwrt:25.12.2
           - immortalwrt:24.10.6
+          - openwrt:25.12.6
           - openwrt:25.12.5
           - openwrt:24.10.8
       openwrt_kernel:
@@ -35,7 +36,7 @@ on:
       openwrt_ip:
         description: "Set OpenWrt default IP address."
         required: false
-        default: "192.168.1.1"
+        default: "192.168.2.1"
 
 env:
   TZ: Etc/UTC
@@ -141,7 +142,8 @@ jobs:
           - Default IP: \`${OPENWRT_IP}\`
           - Default username: \`root\`
           - Default password: \`password\`
-          - WiFi: 2.4G \`HE20\`, 5G \`HE80\` (802.11ax), SSID \`OpenWrt\`, no password
+          - WiFi: 2.4G \`HE20\`, 5G \`HE80\` (802.11ax), SSID \`OpenWrt\`, off on a fresh install, with a random WPA2/WPA3 key (\`Network\` → \`Wireless\`)
+          - WAN: the \`wan\` port is bridged in hardware to gmac1 (\`eth0\`); move another port into \`br-wanlink\` to use it as WAN instead
           - Services: zapret, AdGuard Home (setup wizard on port \`3000\`)
           ### Install to eMMC
           - Login to OpenWrt → \`System\` → \`Amlogic Service\` → \`Install OpenWrt\`
