@@ -4,10 +4,12 @@
 # all other ports use gmac0 (RGMII to port 7), so WAN and LAN traffic each get
 # their own 1 Gbit/s link.
 #
-# WAN ports follow the config: the interfaces in the firewall "wan" zone are
-# traced down to switch ports through VLANs, bridges and bridge VLANs. Set
-# network.globals.haku_gmac1_ports to a list of ports to pick them by hand, or
-# to "none" to keep every port on gmac0. DRY_RUN=1 only prints the plan.
+# Off unless network.globals.haku_gmac1_ports is set: the RTL8367S only adds
+# CPU tags to frames sent to one CPU port (port 7), so a port moved to gmac1
+# loses its received traffic. With "auto", WAN ports follow the config: the
+# interfaces in the firewall "wan" zone are traced down to switch ports
+# through VLANs, bridges and bridge VLANs. A list of ports picks them by hand;
+# unset or "none" keeps every port on gmac0. DRY_RUN=1 only prints the plan.
 
 . /lib/functions.sh
 
@@ -174,7 +176,7 @@ USER_PORTS="$(echo "$PORT_MAP" | cut -d' ' -f1 | tr '\n' ' ')"
 WAN_PORTS=""
 manual="$(uci ${UCI_CONFIG_DIR:+-c "$UCI_CONFIG_DIR"} -q get network.globals.haku_gmac1_ports)"
 case "$manual" in
-"" | auto)
+auto)
 	WAN_IFACES=""
 	config_load firewall
 	config_foreach wan_zone_cb zone
@@ -185,7 +187,7 @@ case "$manual" in
 		resolve_interface "$iface"
 	done
 	;;
-none)
+"" | none)
 	;;
 *)
 	for p in $manual; do
