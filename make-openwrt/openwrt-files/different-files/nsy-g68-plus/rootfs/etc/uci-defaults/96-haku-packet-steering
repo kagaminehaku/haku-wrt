@@ -1,6 +1,6 @@
 #!/bin/sh
-# haku-wrt: spread packet processing over all four cores. All eth0 interrupts
-# land on one CPU; with packet steering the softirq load on that core drops and
+# haku-wrt: spread packet processing over all four cores. All interrupts of a
+# GMAC land on one CPU; with packet steering the softirq load on that core drops and
 # the other cores share the work. A value already set by the user is kept.
 
 [ -n "$(uci -q get network.@globals[0].packet_steering)" ] && exit 0
