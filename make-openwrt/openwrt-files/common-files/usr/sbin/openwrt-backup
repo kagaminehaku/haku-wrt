@@ -24,6 +24,7 @@ else
 ./opt/zapret/config \
 ./opt/zapret/ipset/ \
 ./opt/zapret/init.d/openwrt/custom.d/ \
+./usr/libexec/softethervpn/vpn_server.config \
 ./etc/amlogic_backup_list.conf \
 ./etc/adblocklist/ \
 ./etc/amule/ \
