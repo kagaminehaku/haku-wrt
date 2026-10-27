@@ -458,6 +458,11 @@ NEW_ROOT_NAME=$(echo ${NEW_ROOT_PART_MSG} | awk '{print $1}')
 NEW_ROOT_PATH=$(echo ${NEW_ROOT_PART_MSG} | awk '{print $2}')
 NEW_ROOT_UUID=$(echo ${NEW_ROOT_PART_MSG} | awk '{print $4}')
 NEW_ROOT_MP=$(echo ${NEW_ROOT_PART_MSG} | awk '{print $5}')
+# Formatting keeps the PARTUUID, which boards without an initramfs boot from
+NEW_ROOT_PARTUUID=$(blkid -p -s PART_ENTRY_UUID -o value ${NEW_ROOT_PATH} 2>/dev/null)
+if [ "${NEW_ROOT_PARTUUID}" == "" ]; then
+    error_msg "Cannot read the PARTUUID of ${NEW_ROOT_PATH}, so it cannot be upgraded with this script!"
+fi
 
 # losetup
 losetup -f -P ${IMG_NAME}
@@ -895,9 +900,13 @@ rootfstype=btrfs
 rootflags=compress=zstd:${ZSTD_LEVEL}
 EOF
 
-# Replace the UUID for extlinux/extlinux.conf if it exists
+# Replace the root device for extlinux/extlinux.conf if it exists
+# (boards without an initramfs, such as nsy-g68-plus, use root=PARTUUID=)
 [[ -f "extlinux/extlinux.conf" ]] && {
-    sed -i -E "s|UUID=[^ ]*|UUID=${NEW_ROOT_UUID}|" extlinux/extlinux.conf 2>/dev/null
+    sed -i -E \
+        -e "s|root=PARTUUID=[^ ]*|root=PARTUUID=${NEW_ROOT_PARTUUID}|" \
+        -e "s|root=UUID=[^ ]*|root=UUID=${NEW_ROOT_UUID}|" \
+        extlinux/extlinux.conf 2>/dev/null
 }
 
 # 如果新的dtb文件不存在,则用旧的代替
