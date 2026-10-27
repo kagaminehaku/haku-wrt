@@ -60,16 +60,6 @@ jobs:
           sudo mount "${build_dev}" /builder
           df -Th
 
-      - name: Prepare initramfs tools for uInitrd
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          sudo apt-get -y update
-          sudo apt-get -y install initramfs-tools u-boot-tools
-          # Same hook as Armbian: convert initrd.img-<version> into uInitrd-<version>
-          sudo install -D -m 0755 compile-kernel/tools/initramfs/post-update.d/99-uboot \
-              /etc/initramfs/post-update.d/99-uboot
-
       - name: Compile the kernel [ ${{ env.KERNEL_VERSION }} ]
         env:
           KERNEL_AUTO: ${{ inputs.kernel_auto }}
@@ -86,6 +76,7 @@ jobs:
               -m all \
               -t gcc \
               -n "${KERNEL_SIGN}" \
+              -z none \
               -d "${DELETE_SOURCE}"
 
           ls -lh compile-kernel/output/

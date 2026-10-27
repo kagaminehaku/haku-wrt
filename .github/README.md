@@ -23,7 +23,7 @@ WiFi only works on boards where the MT7916 shows up as both `14c3:7906` and `14c
 - **WAN on its own gigabit link.** The switch forwards the WAN port in hardware to gmac1 over SGMII, so WAN and LAN no longer share one link to the SoC. The WAN port is chosen in LuCI: whichever port sits in the `br-wanlink` bridge with `sgmii` is WAN.
 - **Boots from NVMe.** Mainline U-Boot in the SPI flash boots NVMe first, then eMMC, then USB, so the system can live on an M.2 SSD and spare the eMMC. Holding the reset button at power-on boots a USB rescue stick.
 - **Port LEDs you can configure.** Each port LED is a Linux LED device; pick link, activity or speed modes in `System → LED Configuration`, and the switch drives them in hardware.
-- **Kernel made for this board.** A 6.18.y kernel from [kagaminehaku/linux-6.18.y](https://github.com/kagaminehaku/linux-6.18.y) with G68 fixes (PCIe link stability after U-Boot, RTL8367S LEDs and SGMII, an accurate device tree) and a config trimmed to what the board can use, while keeping USB Ethernet, 4G modems, USB storage, USB WiFi, webcams and the RK3568 video blocks available.
+- **Kernel made for this board.** A 6.18.y kernel from [kagaminehaku/linux-6.18.y](https://github.com/kagaminehaku/linux-6.18.y) with G68 fixes (PCIe link stability after U-Boot, RTL8367S LEDs and SGMII, an accurate device tree) and a config trimmed to what the board can use, while keeping USB Ethernet, 4G modems, USB storage, USB WiFi, webcams and the RK3568 video blocks available. It boots without an initramfs, like official OpenWrt, which saves about 10 seconds per boot.
 - **Safe defaults.** The LAN defaults to `192.168.2.1`, so it does not clash with ISP modems on `192.168.1.x`, and a fresh install keeps WiFi off with a random WPA2/WPA3 key instead of broadcasting an open network.
 - **zapret and AdGuard Home included.** Both are under `Services` in LuCI. zapret (DPI bypass, from [remittor/zapret-openwrt](https://github.com/remittor/zapret-openwrt)) needs a strategy that suits your ISP. AdGuard Home starts with its setup wizard on port 3000, and DNS falls back to the default upstream if it stops.
 - **Self-contained builds.** U-Boot, kernel and firmware are all built from this repository, with the board's u-boot, MT7916 firmware and platform files vendored (see [VENDORED.md](../make-openwrt/VENDORED.md)).
@@ -43,7 +43,7 @@ Default login: `192.168.2.1`, user `root`, password `password`. Change the passw
 
 To change the kernel (DTS, drivers, config), edit kagaminehaku/linux-6.18.y or `compile-kernel/tools/config/config-6.18` and rerun step 1. `compile-kernel/tools/config/trim-g68.sh` regenerates the trimmed config.
 
-The kernel can also be built on an x86_64 Linux or WSL2 machine with `compile-kernel/tools/script/wsl_compile_kernel.sh`, which cross-compiles it, builds uInitrd in an arm64 chroot and produces the same `6.18.x.tar.gz` for `kernel_stable` (about 25 minutes from scratch on a desktop CPU, a few minutes for small changes).
+The kernel can also be built on an x86_64 Linux or WSL2 machine with `compile-kernel/tools/script/wsl_compile_kernel.sh`, which cross-compiles it and produces the same `6.18.x.tar.gz` for `kernel_stable` (about 25 minutes from scratch on a desktop CPU, a few minutes for small changes).
 
 **Actions → Compile haku-wrt U-Boot** builds the SPI flash bootloader (`uboot_g68` release).
 

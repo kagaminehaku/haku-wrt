@@ -18,10 +18,9 @@ Kernel build (`.github/workflows/compile-haku-kernel.yml`):
 | Files in this repo | Source | Commit |
 |---|---|---|
 | `compile-kernel/tools/script/armbian_compile_kernel.sh`, `armbian-compile-kernel-depends` | [ophub/amlogic-s9xxx-armbian](https://github.com/ophub/amlogic-s9xxx-armbian) `compile-kernel/tools/script/` | `c3230bf` |
-| `compile-kernel/tools/initramfs/post-update.d/99-uboot` | same, `build-armbian/armbian-files/common-files/etc/initramfs/post-update.d/` | `c3230bf` |
 | `compile-kernel/tools/config/config-6.18` | [ophub/kernel](https://github.com/ophub/kernel) `kernel-config/release/stable/` | `ec2112a` |
 
-The compile script was changed to build with the system gcc on the arm64 runner and to use only the vendored config. Kernel sources come from [kagaminehaku/linux-6.18.y](https://github.com/kagaminehaku/linux-6.18.y), a fork of ophub/linux-6.18.y.
+The compile script was changed to build with the system gcc on the arm64 runner, to use only the vendored config and to build no uInitrd (`-z none`). Kernel sources come from [kagaminehaku/linux-6.18.y](https://github.com/kagaminehaku/linux-6.18.y), a fork of ophub/linux-6.18.y.
 
 ImageBuilder packages not in the official feeds (`config/imagebuilder/packages/`):
 

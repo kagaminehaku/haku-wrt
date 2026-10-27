@@ -5,13 +5,10 @@
 # Produces the same <version>.tar.gz as the "Compile haku-wrt kernel" workflow
 # (boot-, dtb-rockchip- and modules-<kernel>.tar.gz plus sha256sums), which is
 # what remake downloads from the kernel_stable release. The kernel is built
-# with the aarch64 cross gcc; uInitrd is generated inside an arm64 Ubuntu
-# chroot through qemu-user-static, because initramfs-tools packs the host's
-# own binaries.
+# with the aarch64 cross gcc. No uInitrd: the G68 boots without an initramfs.
 #
 # Host packages (Ubuntu): build-essential gcc-aarch64-linux-gnu bc bison flex
-#   libssl-dev libelf-dev ccache git u-boot-tools device-tree-compiler cpio
-#   kmod rsync zstd qemu-user-static binfmt-support debootstrap
+#   libssl-dev libelf-dev ccache git device-tree-compiler cpio kmod rsync zstd
 #
 # Usage: sudo wsl_compile_kernel.sh [options]
 #   -w <dir>   compile-kernel/tools directory (default: next to this script)
@@ -27,7 +24,6 @@ set -eo pipefail
 repo_url="https://github.com/kagaminehaku/linux-6.18.y.git"
 src_dir="/root/build/linux-6.18.y"
 out_dir="/root/build/output"
-chroot_dir="/root/build/arm64-root"
 custom_name="-haku"
 use_local="no"
 dtbs_only="no"
@@ -47,9 +43,7 @@ while getopts "w:s:lo:n:d" opt; do
 done
 [[ "${custom_name:0:1}" == "-" ]] || custom_name="-${custom_name}"
 config_file="${tools_dir}/config/config-6.18"
-uboot_hook="${tools_dir}/initramfs/post-update.d/99-uboot"
-[[ -s "${config_file}" && -s "${uboot_hook}" ]] || { echo "No config/uInitrd hook under ${tools_dir}"; exit 1; }
-[[ "$(id -u)" -eq 0 ]] || { echo "Run as root (the uInitrd chroot needs it)."; exit 1; }
+[[ -s "${config_file}" ]] || { echo "No config-6.18 under ${tools_dir}/config"; exit 1; }
 
 export CCACHE_DIR="/root/.ccache"
 ccache -M 20G >/dev/null
@@ -97,31 +91,7 @@ cp -f System.map "${stage}/boot/System.map-${kernel_name}"
 cp -f .config "${stage}/boot/config-${kernel_name}"
 cp -f arch/arm64/boot/Image "${stage}/boot/vmlinuz-${kernel_name}"
 
-# 4. uInitrd, inside an arm64 chroot so the initramfs gets arm64 binaries
-if [[ ! -x "${chroot_dir}/usr/sbin/update-initramfs" ]]; then
-    debootstrap --arch=arm64 --variant=minbase \
-        --include=initramfs-tools,u-boot-tools,xz-utils,kmod,zstd \
-        noble "${chroot_dir}" http://ports.ubuntu.com/ubuntu-ports
-fi
-install -D -m 0755 "${uboot_hook}" "${chroot_dir}/etc/initramfs/post-update.d/99-uboot"
-sed -i 's|^COMPRESS=.*|COMPRESS=xz|' "${chroot_dir}/etc/initramfs-tools/initramfs.conf"
-sed -i 's|^update_initramfs=.*|update_initramfs=yes|' "${chroot_dir}/etc/initramfs-tools/update-initramfs.conf"
-
-rm -rf "${chroot_dir}/boot" "${chroot_dir}/usr/lib/modules"
-mkdir -p "${chroot_dir}/boot" "${chroot_dir}/usr/lib/modules"
-cp -f "${stage}/boot"/* "${chroot_dir}/boot/"
-cp -a "${stage}/modules/lib/modules/${kernel_name}" "${chroot_dir}/usr/lib/modules/"
-
-for fs in proc sys dev; do mount --bind "/${fs}" "${chroot_dir}/${fs}"; done
-trap 'for fs in proc sys dev; do umount -l "${chroot_dir}/${fs}" 2>/dev/null || true; done' EXIT
-chroot "${chroot_dir}" update-initramfs -c -k "${kernel_name}"
-for fs in proc sys dev; do umount -l "${chroot_dir}/${fs}"; done
-trap - EXIT
-
-[[ -f "${chroot_dir}/boot/uInitrd-${kernel_name}" ]] || { echo "uInitrd was not generated"; exit 1; }
-cp -f "${chroot_dir}/boot"/{initrd.img,uInitrd}-"${kernel_name}" "${stage}/boot/"
-
-# 5. Archives, laid out like the CI output
+# 4. Archives, laid out like the CI output
 (cd "${stage}/boot" && chmod +x * && tar -czf "${out_dir}/${kernel_version}/boot-${kernel_name}.tar.gz" *)
 
 cp -f arch/arm64/boot/dts/rockchip/*.dtb "${stage}/dtb/"

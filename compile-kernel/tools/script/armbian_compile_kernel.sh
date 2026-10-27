@@ -85,8 +85,9 @@ custom_name="-haku"
 pkg_maintainer="haku-wrt <noreply@github.com>"
 # Set the kernel compile object, options: [ dtbs / all ]
 package_list="all"
-# Set the compression format, options: [ gzip / lzma / xz / zstd ]
-compress_format="xz"
+# Set the initramfs compression format, options: [ none / gzip / lzma / xz / zstd ]
+# none: build no uInitrd, haku-wrt boots the G68 without an initramfs
+compress_format="none"
 # Set whether to clear ccache before compiling the kernel, options: [ true / false ]
 ccache_clear="false"
 # Set whether to automatically delete the source code after the kernel is compiled
@@ -696,37 +697,41 @@ generate_uinitrd() {
     cp -rf ${output_path}/modules/lib/modules/${kernel_outname} -t /usr/lib/modules
     #echo -e "${INFO} Kernel copy results in the [ /usr/lib/modules ] directory: \n$(ls -l /usr/lib/modules) \n"
 
-    # COMPRESS: [ gzip | lzma | xz | zstd | lz4 ]
-    [[ "${compress_format}" =~ ^(gzip|lzma|xz|zstd|lz4)$ ]] || {
-        echo -e "${WARNING} The compression format [ ${compress_format} ] is invalid, reset to [ xz ] format."
-        compress_format="xz"
-    }
-    compress_initrd_file="/etc/initramfs-tools/initramfs.conf"
-    if [[ -f "${compress_initrd_file}" ]]; then
-        sed -i "s|^COMPRESS=.*|COMPRESS=${compress_format}|g" ${compress_initrd_file}
-        compress_settings="$(cat ${compress_initrd_file} | grep -E ^COMPRESS=)"
-        echo -e "${INFO} Set the [ ${compress_settings} ] in the initramfs.conf file."
-    else
-        error_msg "The [ ${compress_initrd_file} ] file does not exist."
-    fi
-
     cd /boot
-    echo -e "${STEPS} Generating uInitrd file..."
-
-    # Enable update_initramfs
-    [[ -f "${initramfs_conf}" ]] && sed -i "s|^update_initramfs=.*|update_initramfs=yes|g" ${initramfs_conf}
-
-    # Generate uInitrd file directly under armbian system
-    update-initramfs -c -k ${kernel_outname}
-
-    # Disable update_initramfs
-    [[ -f "${initramfs_conf}" ]] && sed -i "s|^update_initramfs=.*|update_initramfs=no|g" ${initramfs_conf}
-
-    if [[ -f "uInitrd" ]]; then
-        echo -e "${SUCCESS} The initrd.img and uInitrd files generated successfully."
-        [[ ! -L "uInitrd" ]] && mv -vf uInitrd uInitrd-${kernel_outname}
+    # COMPRESS: [ none | gzip | lzma | xz | zstd | lz4 ], none builds no initramfs
+    if [[ "${compress_format}" == "none" ]]; then
+        echo -e "${INFO} Skip the uInitrd generation, the kernel boots without an initramfs."
     else
-        echo -e "${WARNING} The initrd.img and uInitrd files were not updated."
+        [[ "${compress_format}" =~ ^(gzip|lzma|xz|zstd|lz4)$ ]] || {
+            echo -e "${WARNING} The compression format [ ${compress_format} ] is invalid, reset to [ xz ] format."
+            compress_format="xz"
+        }
+        compress_initrd_file="/etc/initramfs-tools/initramfs.conf"
+        if [[ -f "${compress_initrd_file}" ]]; then
+            sed -i "s|^COMPRESS=.*|COMPRESS=${compress_format}|g" ${compress_initrd_file}
+            compress_settings="$(cat ${compress_initrd_file} | grep -E ^COMPRESS=)"
+            echo -e "${INFO} Set the [ ${compress_settings} ] in the initramfs.conf file."
+        else
+            error_msg "The [ ${compress_initrd_file} ] file does not exist."
+        fi
+
+        echo -e "${STEPS} Generating uInitrd file..."
+
+        # Enable update_initramfs
+        [[ -f "${initramfs_conf}" ]] && sed -i "s|^update_initramfs=.*|update_initramfs=yes|g" ${initramfs_conf}
+
+        # Generate uInitrd file directly under armbian system
+        update-initramfs -c -k ${kernel_outname}
+
+        # Disable update_initramfs
+        [[ -f "${initramfs_conf}" ]] && sed -i "s|^update_initramfs=.*|update_initramfs=no|g" ${initramfs_conf}
+
+        if [[ -f "uInitrd" ]]; then
+            echo -e "${SUCCESS} The initrd.img and uInitrd files generated successfully."
+            [[ ! -L "uInitrd" ]] && mv -vf uInitrd uInitrd-${kernel_outname}
+        else
+            echo -e "${WARNING} The initrd.img and uInitrd files were not updated."
+        fi
     fi
 
     echo -e "${INFO} File situation in the /boot directory after update: \n$(ls -hl *${kernel_outname})"
