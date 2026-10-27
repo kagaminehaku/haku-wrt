@@ -729,6 +729,8 @@ make_image() {
 
     # Format rootfs partition
     mkfs.btrfs -f -U ${ROOTFS_UUID} -L "ROOTFS" -m single ${loop_new}p2 >/dev/null 2>&1
+    # Boards that boot without an initramfs find the rootfs by its PARTUUID
+    ROOTFS_PARTUUID="$(blkid -p -s PART_ENTRY_UUID -o value ${loop_new}p2 2>/dev/null)"
 
     # Write the specific bootloader for [ Amlogic ] boxes
     [[ "${PLATFORM}" == "amlogic" ]] && {
@@ -865,7 +867,7 @@ replace_kernel() {
     tar -mxzf ${kernel_boot} -C ${tag_bootfs}
     [[ "${PLATFORM}" == "allwinner" ]] && (cd ${tag_bootfs} && cp -f uInitrd-${kernel_name} uInitrd && cp -f vmlinuz-${kernel_name} Image)
     [[ "${PLATFORM}" == "amlogic" ]] && (cd ${tag_bootfs} && cp -f uInitrd-${kernel_name} uInitrd && cp -f vmlinuz-${kernel_name} zImage)
-    [[ "${PLATFORM}" == "rockchip" ]] && (cd ${tag_bootfs} && ln -sf uInitrd-${kernel_name} uInitrd && ln -sf vmlinuz-${kernel_name} Image)
+    [[ "${PLATFORM}" == "rockchip" ]] && (cd ${tag_bootfs} && ln -sf vmlinuz-${kernel_name} Image && { [[ ! -f uInitrd-${kernel_name} ]] || ln -sf uInitrd-${kernel_name} uInitrd; })
     [[ "$(ls ${tag_bootfs}/*${kernel_name} -l 2>/dev/null | grep "^-" | wc -l)" -ge "2" ]] || error_msg "The /boot files is missing."
     [[ "${PLATFORM}" == "amlogic" ]] && get_textoffset "${tag_bootfs}/zImage"
 
@@ -920,6 +922,10 @@ refactor_bootfs() {
     boot_extlinux_file="extlinux/extlinux.conf.bak"
     rename_extlinux_file="extlinux/extlinux.conf"
     [[ -f "${boot_extlinux_file}" ]] && {
+        if grep -q "PARTUUID=ROOTFS" "${boot_extlinux_file}"; then
+            [[ -n "${ROOTFS_PARTUUID}" ]] || error_msg "Cannot read the PARTUUID of the rootfs partition."
+            sed -i "s|PARTUUID=ROOTFS|PARTUUID=${ROOTFS_PARTUUID} ${uenv_rootdev#* }|g" "${boot_extlinux_file}"
+        fi
         sed -i \
             -e "s|LABEL=ROOTFS|${uenv_rootdev}|g" \
             -e "s|meson.*.dtb|${FDTFILE}|g" \
