@@ -276,9 +276,16 @@ update_kernel() {
     # Extract the new kernel
     tar --no-same-owner -xf ${P4_PATH}/boot-${kernel_name}.tar.gz -C /boot
 
+    # Boards whose extlinux.conf loads no initramfs (nsy-g68-plus) need no uInitrd
+    local no_initrd=""
+    [[ -f /boot/extlinux/extlinux.conf ]] && ! grep -q "^[[:space:]]*INITRD" /boot/extlinux/extlinux.conf && no_initrd="yes"
+
     # Check if the file exists
     local valid_files
-    if [[ "${PLATFORM}" == "qemu-aarch64" ]]; then
+    if [[ -n "${no_initrd}" ]]; then
+        valid_files="vmlinuz-${kernel_name} config-${kernel_name} System.map-${kernel_name}"
+        rm -f /boot/uInitrd* /boot/initrd.img*
+    elif [[ "${PLATFORM}" == "qemu-aarch64" ]]; then
         valid_files="vmlinuz-${kernel_name} initrd.img-${kernel_name} config-${kernel_name} System.map-${kernel_name}"
         rm -f /boot/uInitrd*
     else
@@ -293,6 +300,8 @@ update_kernel() {
         cd /boot
         if [[ "${PLATFORM}" == "qemu-aarch64" ]]; then
             ln -sf initrd.img-${kernel_name} initrd.img
+            ln -sf vmlinuz-${kernel_name} ${MYBOOT_VMLINUZ}
+        elif [[ -n "${no_initrd}" ]]; then
             ln -sf vmlinuz-${kernel_name} ${MYBOOT_VMLINUZ}
         elif [[ "$boot_fstype" == "vfat" ]]; then
             cp -f uInitrd-${kernel_name} uInitrd
@@ -452,7 +461,7 @@ sos_kernel() {
             cp -f /boot/u-boot.ext u-boot.emmc
             chmod +x u-boot.ext u-boot.emmc
         }
-        cp -rf /boot/{*-${kernel_signature},uInitrd,*Image,dtb} .
+        cp -rf /boot/{*-${kernel_signature},*Image,dtb} . && { [[ ! -e "/boot/uInitrd" ]] || cp -rf /boot/uInitrd .; }
         [[ "${?}" -ne "0" ]] && error_msg "(1/2) [ boot ] kernel files rescue failed."
         echo -e "(1/2) [ boot ] kernel files rescue succeeded."
 
